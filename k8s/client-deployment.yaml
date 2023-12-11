@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-deployment
+spec:
+  replicas: 3
+  selector: #This is used to define how the Deployment identifies which Pods it manages.
+    matchLabels:
+      component: web
+  template: #לפי הטמפלט קוברנטיס יודע איזה לייבל לתת לקןנטיינרים חדשים במידה וצריך לעשות סקיילינג
+    metadata:
+      labels:
+        component: web
+    spec:
+      containers: # כך יבנו הקונטיינרים שיווצרו בפוד עם פורא פתוח 3000
+       - name: client
+         image: bengoren/multi-client
+         ports:
+          - containerPort: 3000
+#matchLables: This is a key-value pair that is used for label-based selection of Pods. It ensures that the Deployment manages Pods with specific labels. In this case, the selector is set to match Pods with the label component: web.
