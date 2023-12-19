@@ -1,0 +1,63 @@
+name: Deploy MultiK8s
+on:
+  push:
+    branches:
+      - main
+ 
+env:
+  SHA: $(git rev-parse HEAD) #sets an environment variable SHA to the current Git commit hash.
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+ 
+      - name: Test
+        run: |-
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker build -t bengoren/react-test -f ./client/Dockerfile.dev ./client
+          docker run -e CI=true bengoren/react-test npm test
+ 
+      - name: Set Service Key
+        uses: 'google-github-actions/auth@v0'
+        with:
+          credentials_json: '${{ secrets.GKE_SA_KEY }}'
+ 
+      - name: Set Project
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: static-webbing-407814
+ 
+      - name: Auth
+        run: |-
+          gcloud --quiet auth configure-docker 
+ 
+      - name: Get Credentials
+        uses: google-github-actions/get-gke-credentials@v0
+        with:
+          cluster_name: multi-cluster
+          location: us-central1-c
+ 
+      - name: Build
+        run: |-
+          docker build -t bengoren/multi-client-k8s-gh:latest -t bengoren/multi-client-k8s-gh:${{ env.SHA }} -f ./client/Dockerfile ./client
+          docker build -t bengoren/multi-server-k8s-pgfix-gh:latest -t bengoren/multi-server-k8s-pgfix-gh:${{ env.SHA }} -f ./server/Dockerfile ./server
+          docker build -t bengoren/multi-worker-k8s-gh:latest -t bengoren/multi-worker-k8s-gh:${{ env.SHA }} -f ./worker/Dockerfile ./worker
+ 
+      - name: Push
+        run: |-
+          docker push bengoren/multi-client-k8s-gh:latest
+          docker push bengoren/multi-server-k8s-pgfix-gh:latest
+          docker push bengoren/multi-worker-k8s-gh:latest
+ 
+          docker push bengoren/multi-client-k8s-gh:${{ env.SHA }}
+          docker push bengoren/multi-server-k8s-pgfix-gh:${{ env.SHA }}
+          docker push bengoren/multi-worker-k8s-gh:${{ env.SHA }}
+ 
+      - name: Apply
+        run: |-
+          kubectl apply -f k8s
+          kubectl set image deployments/server-deployment server=bengoren/multi-server-k8s-pgfix-gh:${{ env.SHA }}
+          kubectl set image deployments/client-deployment client=bengoren/multi-client-k8s-gh:${{ env.SHA }}
+          kubectl set image deployments/worker-deployment worker=bengoren/multi-worker-k8s-gh:${{ env.SHA }}
